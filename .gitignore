@@ -3,7 +3,7 @@
 /app/build
 /app/release
 /.gradle
-.kotlin
+/.kotlin
 .idea
 *.iml
 local.properties
@@ -16,14 +16,18 @@ local.properties
 .cxx
 captures/
 
+# 图标生成中间产物（保留 gen_icon.py 脚本本身，忽略其输出目录）
+icon_out/
+
+# 个人同步辅助脚本（含本机绝对路径，不入库）
+copy_for_github.py
+
 # 真机排查用的临时产物（uiautomator dump / 截图 / 诊断日志）
 .tmpdiag
 screenshots
 *.log
 
-# 图标生成中间产物（保留 gen_icon.py 脚本本身）
-icon_out/
-
-# 例外：发布用的 APK 需要纳入版本库
+# APK：默认忽略，但保留发布目录中的 release 包
+*.apk
 !releases/
 !releases/*.apk

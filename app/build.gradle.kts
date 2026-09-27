@@ -23,7 +23,7 @@ android {
         // 必须大于已装版本，否则报 INSTALL_FAILED_VERSION_DOWNGRADE 装不上。
         // 1.0 是历史版本（当时 versionCode 手写成 1），从这里开始按「×10」推算，
         // 1.1 → 11 仍然大于 1，覆盖安装不受影响。
-        val appVersionName = "1.1"
+        val appVersionName = "1.2"
         versionCode = appVersionName.substringBefore(".").toInt() * 10 +
             appVersionName.substringAfter(".").toInt()
         versionName = appVersionName
@@ -44,37 +44,20 @@ android {
         buildConfig = true
     }
 
-    // 发布签名：从 local.properties 读取（该文件已被 .gitignore 排除，不提交版本库）。
-    // 需要在 local.properties 里提供：
-    //   RELEASE_STORE_FILE=release-keystore.jks
-    //   RELEASE_STORE_PASSWORD=你的密码
-    //   RELEASE_KEY_ALIAS=mangareader
-    //   RELEASE_KEY_PASSWORD=你的密码
-    // 未提供时（例如克隆仓库后尚未配置），release 回退到 debug 签名，仍可构建，
-    // 但产物不能用于正式发布。
-    val localProps = java.util.Properties().apply {
-        val f = rootProject.file("local.properties")
-        if (f.exists()) f.inputStream().use { load(it) }
-    }
-    val hasReleaseKey = localProps.getProperty("RELEASE_STORE_FILE") != null
+    // 发布签名：密钥库放在项目根目录，密码是本地开发用的弱口令。
+    // 真实项目请把密码放进 local.properties（不提交）或 CI 的环境变量里，别写死在这里。
     signingConfigs {
         create("release") {
-            if (hasReleaseKey) {
-                storeFile = rootProject.file(localProps.getProperty("RELEASE_STORE_FILE")!!)
-                storePassword = localProps.getProperty("RELEASE_STORE_PASSWORD") ?: ""
-                keyAlias = localProps.getProperty("RELEASE_KEY_ALIAS") ?: ""
-                keyPassword = localProps.getProperty("RELEASE_KEY_PASSWORD") ?: ""
-            }
+            storeFile = rootProject.file("release-keystore.jks")
+            storePassword = "mangareader123"
+            keyAlias = "mangareader"
+            keyPassword = "mangareader123"
         }
     }
 
     buildTypes {
         release {
-            signingConfig = if (hasReleaseKey) {
-                signingConfigs.getByName("release")
-            } else {
-                signingConfigs.getByName("debug")
-            }
+            signingConfig = signingConfigs.getByName("release")
             // 暂不开混淆：Compose / Coil / Room 的 keep 规则还没配齐，
             // 贸然开启容易把反射用到的类删掉，导致运行时崩溃。
             isMinifyEnabled = false

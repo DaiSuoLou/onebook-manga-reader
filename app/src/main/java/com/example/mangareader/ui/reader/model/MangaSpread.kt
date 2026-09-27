@@ -28,13 +28,17 @@ object SpreadHelper {
      * @param isDualPage 是否开启双页并排
      * @param isRtl 是否日漫从右往左
      * @param firstPageCover 是否保持第 0 页（封面）单页独占
+     * @param manualSpread 手动合并跨页：不为 null 时，只有该 spread 是双页，其余页保持单页
      */
     fun createSpreads(
         totalPages: Int,
         isDualPage: Boolean,
         isRtl: Boolean,
         firstPageCover: Boolean = true,
+        manualSpread: MangaSpread? = null,
     ): List<MangaSpread> {
+        manualSpread?.let { return createManualSpreads(totalPages, it, isRtl) }
+
         if (!isDualPage || totalPages <= 1) {
             return (0 until totalPages).map { MangaSpread(leftPageIndex = it, rightPageIndex = null) }
         }
@@ -66,6 +70,45 @@ object SpreadHelper {
                 }
             }
             currentIndex += 2
+        }
+        return spreads
+    }
+
+    /**
+     * 手动合并跨页：只在 [manual] 指定位置显示双页，其他页全部单页。
+     * 这样用户可以临时把任意相邻两页拼成完整大图，像真实漫画书的跨页一样。
+     */
+    private fun createManualSpreads(
+        totalPages: Int,
+        manual: MangaSpread,
+        isRtl: Boolean,
+    ): List<MangaSpread> {
+        if (totalPages <= 0) return emptyList()
+        val spreads = mutableListOf<MangaSpread>()
+        val left = manual.leftPageIndex
+        val right = manual.rightPageIndex
+        val startPage = minOf(left ?: Int.MAX_VALUE, right ?: Int.MAX_VALUE)
+        val endPage = maxOf(left ?: -1, right ?: -1)
+
+        // manual spread 之前的页保持单页
+        for (i in 0 until minOf(startPage, totalPages)) {
+            spreads.add(MangaSpread.single(i, isRtl))
+        }
+        // 手动合并的跨页（边界保护）
+        when {
+            left != null && right != null && left in 0 until totalPages && right in 0 until totalPages -> {
+                spreads.add(MangaSpread(leftPageIndex = left, rightPageIndex = right))
+            }
+            left != null && left in 0 until totalPages -> {
+                spreads.add(MangaSpread.single(left, isRtl))
+            }
+            right != null && right in 0 until totalPages -> {
+                spreads.add(MangaSpread.single(right, isRtl))
+            }
+        }
+        // manual spread 之后的页保持单页
+        for (i in maxOf(endPage + 1, 0) until totalPages) {
+            spreads.add(MangaSpread.single(i, isRtl))
         }
         return spreads
     }

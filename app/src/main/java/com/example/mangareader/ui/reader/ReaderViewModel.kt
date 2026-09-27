@@ -126,15 +126,17 @@ class ReaderViewModel(application: Application) : AndroidViewModel(application) 
     /**
      * 解析 WebDAV 句柄 → (源 id, 源内相对路径)。
      *
-     * 句柄是 `dav:` 开头，而多账号的源 id 也是 `dav:` 开头，所以剥掉句柄前缀后
-     * 还得再判一次：出现第二个 `:` 说明带源 id，否则按老格式当 [CredentialsStore.LEGACY_SOURCE_ID]。
+     * 句柄是 `dav:` 开头，多账号时源 id 本身也是 `dav:xxxx` 形态，剥掉句柄前缀后
+     * 应直接按第一个 `/` 切分：左侧整段就是源 id，右侧是相对路径。
+     * 老格式句柄 `dav:作品/第01话` 没有第二个 `dav:`，按 `/` 切分后左侧为 `作品`，
+     * 此时 slash > 0 不成立，仍按老格式当 [CredentialsStore.LEGACY_SOURCE_ID]。
      */
     private fun parseDavHandle(path: String): Pair<String, String> {
         val body = path.removePrefix(DAV_HANDLE_PREFIX)
-        val colon = body.indexOf(':')
         val slash = body.indexOf('/')
-        return if (colon > 0 && slash > colon) {
-            body.substring(0, colon) to body.substring(slash + 1)
+        return if (slash > 0) {
+            val sourceId = body.substring(0, slash)
+            sourceId to body.substring(slash + 1)
         } else {
             CredentialsStore.LEGACY_SOURCE_ID to body
         }

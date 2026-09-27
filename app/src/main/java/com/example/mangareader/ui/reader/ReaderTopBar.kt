@@ -5,7 +5,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Book
 import androidx.compose.material.icons.filled.ScreenRotation
-import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -24,7 +24,9 @@ fun ReaderTopBar(
     title: String,
     isRtl: Boolean,
     onNavigateBack: () -> Unit,
-    onToggleReadingDirection: () -> Unit,
+    /** 手动合并跨页模式；按钮循环 OFF -> 与上一页合并 -> 与下一页合并 -> OFF */
+    spreadJoinMode: ReadingPreferences.SpreadJoinMode = ReadingPreferences.SpreadJoinMode.OFF,
+    onCycleSpreadJoinMode: () -> Unit = {},
     /** 当前方向锁状态；点按钮在 自动 -> 竖屏 -> 横屏 间循环 */
     orientation: ReadingPreferences.ScreenOrientation = ReadingPreferences.ScreenOrientation.AUTO,
     onCycleOrientation: () -> Unit = {},
@@ -50,12 +52,20 @@ fun ReaderTopBar(
             }
         },
         actions = {
-            // 点击在 "从右往左(日漫)" 和 "从左往右(国漫/美漫)" 之间快速切换
-            IconButton(onClick = onToggleReadingDirection) {
+            // 手动合并跨页：以当前页为基点，与上一页或下一页合并成完整大图
+            IconButton(onClick = onCycleSpreadJoinMode) {
                 Icon(
-                    imageVector = Icons.Filled.SwapHoriz,
-                    contentDescription = if (isRtl) "当前: 从右向左" else "当前: 从左向右",
-                    tint = if (isRtl) MaterialTheme.colorScheme.primary else Color.White,
+                    imageVector = Icons.AutoMirrored.Filled.MenuBook,
+                    contentDescription = when (spreadJoinMode) {
+                        ReadingPreferences.SpreadJoinMode.OFF -> "合并跨页"
+                        ReadingPreferences.SpreadJoinMode.JOIN_PREVIOUS -> "已合并上一页"
+                        ReadingPreferences.SpreadJoinMode.JOIN_NEXT -> "已合并下一页"
+                    },
+                    tint = if (spreadJoinMode == ReadingPreferences.SpreadJoinMode.OFF) {
+                        Color.White
+                    } else {
+                        MaterialTheme.colorScheme.primary
+                    },
                 )
             }
 

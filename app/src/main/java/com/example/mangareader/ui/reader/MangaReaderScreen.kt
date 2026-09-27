@@ -53,6 +53,7 @@ import com.example.mangareader.MainActivity
 import com.example.mangareader.core.document.MangaDocument
 import com.example.mangareader.data.Diag
 import com.example.mangareader.data.ReadingPreferences
+import com.example.mangareader.ui.reader.model.MangaSpread
 import com.example.mangareader.ui.reader.model.SpreadHelper
 import com.example.mangareader.ui.reader.model.spreadIndexFor
 import com.example.mangareader.ui.reader.util.FoldableDeviceState
@@ -107,14 +108,63 @@ fun MangaReaderScreen(
     var currentPage by remember { mutableIntStateOf(initialPage.coerceAtLeast(0)) }
     var jumpTarget by remember { mutableStateOf<Int?>(null) }
 
+    // 手动合并跨页时的锚点页码。用户点击合并按钮那一刻，把当前页记录下来，
+    // 后续 spreads 只在该锚点位置显示双页；翻离该位置后自动关闭合并模式。
+    var manualSpreadAnchor by remember { mutableIntStateOf(-1) }
+
+    // 手动合并跨页：根据当前锚点和模式生成一个双页 spread，边界保护。
+    val manualSpread = remember(settings.spreadJoinMode, manualSpreadAnchor, currentPage, document.pageCount) {
+        val anchor = if (manualSpreadAnchor >= 0) manualSpreadAnchor else currentPage
+        when (settings.spreadJoinMode) {
+            ReadingPreferences.SpreadJoinMode.JOIN_PREVIOUS -> {
+                if (anchor > 0) {
+                    MangaSpread(leftPageIndex = anchor - 1, rightPageIndex = anchor)
+                } else {
+                    MangaSpread(leftPageIndex = anchor, rightPageIndex = null)
+                }
+            }
+            ReadingPreferences.SpreadJoinMode.JOIN_NEXT -> {
+                if (anchor < document.pageCount - 1) {
+                    MangaSpread(leftPageIndex = anchor, rightPageIndex = anchor + 1)
+                } else {
+                    MangaSpread(leftPageIndex = anchor, rightPageIndex = null)
+                }
+            }
+            ReadingPreferences.SpreadJoinMode.OFF -> null
+        }
+    }
+
+    // 从 DataStore 恢复合并模式时若锚点未设置，自动用当前页做锚点。
+    LaunchedEffect(settings.spreadJoinMode, currentPage) {
+        if (settings.spreadJoinMode != ReadingPreferences.SpreadJoinMode.OFF && manualSpreadAnchor < 0) {
+            manualSpreadAnchor = currentPage
+        }
+    }
+
     // 翻页命令（音量键 / 点按区域 -> 阅读器 body 消费）：+1 下一页，-1 上一页
     var turnRequest by remember { mutableStateOf<Int?>(null) }
     val turnPage: (Int) -> Unit = { delta -> turnRequest = delta }
 
-    // 页码变化：既刷底栏显示，也回传给 ViewModel 保存进度
+    // 页码变化：既刷底栏显示，也回传给 ViewModel 保存进度。
+    // 手动合并跨页时，一旦翻到合并 spread 之外的页，就自动关闭合并模式。
     val handlePageChanged: (Int) -> Unit = { pageIndex ->
         currentPage = pageIndex
         onPageChanged(pageIndex)
+        if (settings.spreadJoinMode != ReadingPreferences.SpreadJoinMode.OFF &&
+            manualSpreadAnchor >= 0
+        ) {
+            val inManualSpread = when (settings.spreadJoinMode) {
+                ReadingPreferences.SpreadJoinMode.JOIN_PREVIOUS ->
+                    pageIndex == manualSpreadAnchor || pageIndex == manualSpreadAnchor - 1
+                ReadingPreferences.SpreadJoinMode.JOIN_NEXT ->
+                    pageIndex == manualSpreadAnchor || pageIndex == manualSpreadAnchor + 1
+                else -> false
+            }
+            if (!inManualSpread) {
+                manualSpreadAnchor = -1
+                coroutineScope.launch { prefs.setSpreadJoinMode(ReadingPreferences.SpreadJoinMode.OFF) }
+            }
+        }
     }
 
     // 音量键翻页：翻页方向由设置决定。阅读器销毁时必须摘掉钩子，
@@ -279,6 +329,7 @@ fun MangaReaderScreen(
                 anchorPage = currentPage,
                 isReadingRtl = isReadingRtl,
                 effectiveDualPage = effectiveDualPage,
+                manualSpread = manualSpread,
                 foldable = foldable,
                 cropBorders = settings.cropBorders,
                 scaleToFit = settings.scaleToFit,
@@ -322,7 +373,7 @@ fun MangaReaderScreen(
             },
         )
 
-        // 顶部栏（含方向切换 / 方向锁 / 双页切换）
+        // 顶部栏（含手动合并跨页 / 方向锁 / 双页切换）
         AnimatedVisibility(
             visible = isControlsVisible,
             enter = fadeIn() + slideInVertically(initialOffsetY = { -it }),
@@ -333,15 +384,18 @@ fun MangaReaderScreen(
                 title = title,
                 onNavigateBack = onNavigateBack,
                 isRtl = isReadingRtl,
-                onToggleReadingDirection = {
-                    coroutineScope.launch {
-                        val next = if (isReadingRtl) {
-                            ReadingPreferences.Direction.LTR
-                        } else {
-                            ReadingPreferences.Direction.RTL
-                        }
-                        prefs.setDirection(next)
+                spreadJoinMode = settings.spreadJoinMode,
+                onCycleSpreadJoinMode = {
+                    val next = when (settings.spreadJoinMode) {
+                        ReadingPreferences.SpreadJoinMode.OFF ->
+                            ReadingPreferences.SpreadJoinMode.JOIN_PREVIOUS
+                        ReadingPreferences.SpreadJoinMode.JOIN_PREVIOUS ->
+                            ReadingPreferences.SpreadJoinMode.JOIN_NEXT
+                        ReadingPreferences.SpreadJoinMode.JOIN_NEXT ->
+                            ReadingPreferences.SpreadJoinMode.OFF
                     }
+                    manualSpreadAnchor = if (next == ReadingPreferences.SpreadJoinMode.OFF) -1 else currentPage
+                    coroutineScope.launch { prefs.setSpreadJoinMode(next) }
                 },
                 orientation = settings.orientation,
                 onCycleOrientation = {
@@ -448,7 +502,7 @@ private const val EDGE_BACK_WIDTH = 24
 private const val EDGE_BACK_DRAG_THRESHOLD = 16
 
 /**
- * 横向展页阅读（LTR/RTL）：按 Spread 翻页，支持单/双页与折叠屏书本态。
+ * 横向展页阅读（LTR/RTL）：按 Spread 翻页，支持单/双页、折叠屏书本态与手动合并跨页。
  */
 @Composable
 private fun SpreadReaderBody(
@@ -457,6 +511,8 @@ private fun SpreadReaderBody(
     anchorPage: Int,
     isReadingRtl: Boolean,
     effectiveDualPage: Boolean,
+    /** 手动合并跨页 spread；不为 null 时在该位置强制显示双页，其余页保持单页 */
+    manualSpread: MangaSpread? = null,
     foldable: FoldableDeviceState,
     cropBorders: Boolean,
     scaleToFit: Boolean,
@@ -469,23 +525,23 @@ private fun SpreadReaderBody(
     onTurnHandled: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    // 重新编排展页数据
-    val spreads = remember(document.pageCount, effectiveDualPage, isReadingRtl) {
+    // 重新编排展页数据；manualSpread 变化时要重建整个 Pager，确保重新定位到新的展页。
+    val spreads = remember(document.pageCount, effectiveDualPage, isReadingRtl, manualSpread) {
         SpreadHelper.createSpreads(
             totalPages = document.pageCount,
             isDualPage = effectiveDualPage,
             isRtl = isReadingRtl,
             firstPageCover = true,
+            manualSpread = manualSpread,
         )
     }
 
-    // 布局形态（单/双页、阅读方向）一变，展页表就重排了：单页 N 个展页 ≈ 双页 N/2 个，
-    // 同一个页码在两个形态里落在不同展页上。PagerState 的 initialPage 只在创建时算一次，
-    // 光靠它会一直停在旧的展页下标 —— 于是「单页翻到第 10 页，切双页就跳到别处」。
-    //
+    // 布局形态（单/双页、阅读方向、手动合并 spread）一变，展页表就重排了：
+    // 单页 N 个展页 ≈ 双页 N/2 个，同一个页码在两个形态里落在不同展页上。
+    // PagerState 的 initialPage 只在创建时算一次，光靠它会一直停在旧的展页下标。
     // 用 key 把整块内容按「形态」隔离：形态一变就重建，initialPage 得以按 anchorPage
     // （此刻正在看的那页）重新定位。下方再兜一层校正，双保险。
-    key(effectiveDualPage to isReadingRtl) {
+    key(effectiveDualPage to isReadingRtl to manualSpread) {
         val pagerState = rememberPagerState(
             initialPage = spreads.spreadIndexFor(anchorPage),
             pageCount = { spreads.size },
@@ -523,7 +579,9 @@ private fun SpreadReaderBody(
             modifier = modifier.fillMaxSize(),
         ) { spreadIndex ->
             val currentSpread = spreads[spreadIndex]
-            if (effectiveDualPage) {
+            // 双页 spread：自动双页模式 or 手动合并跨页。优先按 spread 本身是否含两页判断。
+            val isDualSpread = currentSpread.leftPageIndex != null && currentSpread.rightPageIndex != null
+            if (isDualSpread) {
                 DualPageSpreadView(
                     document = document,
                     spread = currentSpread,

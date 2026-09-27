@@ -33,6 +33,14 @@ class ReadingPreferences(private val context: Context) {
      */
     enum class TapZoneMode { FOLLOW_DIRECTION, LEFT_IS_NEXT, RIGHT_IS_NEXT }
 
+    /**
+     * 手动合并跨页模式。
+     * OFF：正常显示（单页 / 自动双页）；
+     * JOIN_PREVIOUS：以当前页为右页，与上一页合并成完整跨页大图；
+     * JOIN_NEXT：以当前页为左页，与下一页合并成完整跨页大图。
+     */
+    enum class SpreadJoinMode { OFF, JOIN_PREVIOUS, JOIN_NEXT }
+
     data class Settings(
         val direction: Direction = Direction.LTR,
         val doublePage: Boolean = false,
@@ -44,6 +52,7 @@ class ReadingPreferences(private val context: Context) {
         val orientation: ScreenOrientation = ScreenOrientation.AUTO,
         val volumeKeyMode: VolumeKeyMode = VolumeKeyMode.DOWN_IS_NEXT,
         val tapZoneMode: TapZoneMode = TapZoneMode.FOLLOW_DIRECTION,
+        val spreadJoinMode: SpreadJoinMode = SpreadJoinMode.OFF,
     )
 
     val settings: Flow<Settings> = context.readingDataStore.data.map { p ->
@@ -57,6 +66,7 @@ class ReadingPreferences(private val context: Context) {
             orientation = ScreenOrientation.entries.getOrElse(p[KEY_ORIENTATION] ?: 0) { ScreenOrientation.AUTO },
             volumeKeyMode = VolumeKeyMode.entries.getOrElse(p[KEY_VOLUME_KEY_MODE] ?: 0) { VolumeKeyMode.DOWN_IS_NEXT },
             tapZoneMode = TapZoneMode.entries.getOrElse(p[KEY_TAP_ZONE_MODE] ?: 0) { TapZoneMode.FOLLOW_DIRECTION },
+            spreadJoinMode = SpreadJoinMode.entries.getOrElse(p[KEY_SPREAD_JOIN_MODE] ?: 0) { SpreadJoinMode.OFF },
         )
     }
 
@@ -96,6 +106,10 @@ class ReadingPreferences(private val context: Context) {
         context.readingDataStore.edit { it[KEY_TAP_ZONE_MODE] = mode.ordinal }
     }
 
+    suspend fun setSpreadJoinMode(mode: SpreadJoinMode) {
+        context.readingDataStore.edit { it[KEY_SPREAD_JOIN_MODE] = mode.ordinal }
+    }
+
     private companion object {
         val KEY_DIRECTION = intPreferencesKey("direction")
         val KEY_DOUBLE_PAGE = booleanPreferencesKey("double_page")
@@ -106,5 +120,6 @@ class ReadingPreferences(private val context: Context) {
         val KEY_ORIENTATION = intPreferencesKey("orientation")
         val KEY_VOLUME_KEY_MODE = intPreferencesKey("volume_key_mode")
         val KEY_TAP_ZONE_MODE = intPreferencesKey("tap_zone_mode")
+        val KEY_SPREAD_JOIN_MODE = intPreferencesKey("spread_join_mode")
     }
 }
