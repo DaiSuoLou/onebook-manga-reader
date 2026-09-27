@@ -1,33 +1,34 @@
-# 构建产物
-/build
-/app/build
-/app/release
-/.gradle
+# Gradle / Android Studio
+.gradle
+/local.properties
+/.idea
 /.kotlin
-.idea
-*.iml
-local.properties
-
-# 发布签名密钥（绝对不要提交到版本库）
-*.jks
-*.keystore
-
-# 本地缓存
+captures
+.externalNativeBuild
 .cxx
-captures/
+*.iml
 
-# 图标生成中间产物（保留 gen_icon.py 脚本本身，忽略其输出目录）
+# Build outputs
+/build
+*/build
+!gradle/wrapper/gradle-wrapper.jar
+
+# Local configuration (never commit secrets)
+local.properties
+release-keystore.jks
+
+# APK outputs at project root (release builds are kept in releases/ only)
+/*.apk
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# WorkBuddy / assistant helper files
+.workbuddy/
+copy_for_github.py
 icon_out/
 
-# 个人同步辅助脚本（含本机绝对路径，不入库）
-copy_for_github.py
-
-# 真机排查用的临时产物（uiautomator dump / 截图 / 诊断日志）
-.tmpdiag
-screenshots
+# Runtime diagnostics / logs
+.tmpdiag/
 *.log
-
-# APK：默认忽略，但保留发布目录中的 release 包
-*.apk
-!releases/
-!releases/*.apk

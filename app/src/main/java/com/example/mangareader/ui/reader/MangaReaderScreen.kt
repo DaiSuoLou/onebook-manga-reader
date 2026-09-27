@@ -115,34 +115,52 @@ fun MangaReaderScreen(
     // 合并跨页状态按「这本书」(chapterId) 维度持久化在进度库里。
     // 打开时加载已保存的模式 + 锚点页码；之后除非用户手动改，否则一直保持（翻页/重开都不丢）。
     val initialSpread = remember { repo.get(chapterId) }
-    var spreadMode by remember {
-        mutableStateOf(
-            ReadingPreferences.SpreadJoinMode.entries.getOrElse(initialSpread.spreadJoinMode) {
-                ReadingPreferences.SpreadJoinMode.OFF
-            },
-        )
+    val (initialMode, initialAnchor) = remember(initialSpread) {
+        val mode = ReadingPreferences.SpreadJoinMode.entries.getOrElse(initialSpread.spreadJoinMode) {
+            ReadingPreferences.SpreadJoinMode.OFF
+        }
+        val anchor = initialSpread.spreadJoinAnchor
+        // 清理脏数据：锚点非法（<0）时无法构成真正的双页合并，直接重置为关闭
+        if (mode != ReadingPreferences.SpreadJoinMode.OFF && anchor < 0) {
+            ReadingPreferences.SpreadJoinMode.OFF to -1
+        } else {
+            mode to anchor
+        }
     }
-    var spreadAnchor by remember { mutableIntStateOf(initialSpread.spreadJoinAnchor) }
+    var spreadMode by remember { mutableStateOf(initialMode) }
+    var spreadAnchor by remember { mutableIntStateOf(initialAnchor) }
 
-    // 合并跨页：根据已保存的锚点和模式生成一个双页 spread，边界保护。
+    // 合并跨页：只在单页阅读模式下生效；双页模式本身已经双页显示，不应被合并逻辑改回单页。
     // 与上一页合并 -> [anchor-1, anchor]；与下一页合并 -> [anchor, anchor+1]；关闭 -> null。
-    val manualSpread = remember(spreadMode, spreadAnchor, document.pageCount) {
-        when (spreadMode) {
-            ReadingPreferences.SpreadJoinMode.JOIN_PREVIOUS -> {
-                if (spreadAnchor > 0) {
-                    MangaSpread(leftPageIndex = spreadAnchor - 1, rightPageIndex = spreadAnchor)
-                } else {
-                    MangaSpread(leftPageIndex = spreadAnchor, rightPageIndex = null)
+    // 边界外或单页 spread 直接视为 null，避免整本书被强制变成单页。
+    val manualSpread = remember(spreadMode, spreadAnchor, document.pageCount, effectiveDualPage) {
+        if (effectiveDualPage || spreadMode == ReadingPreferences.SpreadJoinMode.OFF) {
+            null
+        } else {
+            val candidate = when (spreadMode) {
+                ReadingPreferences.SpreadJoinMode.JOIN_PREVIOUS -> {
+                    if (spreadAnchor > 0) {
+                        MangaSpread(leftPageIndex = spreadAnchor - 1, rightPageIndex = spreadAnchor)
+                    } else null
                 }
+                ReadingPreferences.SpreadJoinMode.JOIN_NEXT -> {
+                    if (spreadAnchor < document.pageCount - 1) {
+                        MangaSpread(leftPageIndex = spreadAnchor, rightPageIndex = spreadAnchor + 1)
+                    } else null
+                    }
+                else -> null
             }
-            ReadingPreferences.SpreadJoinMode.JOIN_NEXT -> {
-                if (spreadAnchor < document.pageCount - 1) {
-                    MangaSpread(leftPageIndex = spreadAnchor, rightPageIndex = spreadAnchor + 1)
-                } else {
-                    MangaSpread(leftPageIndex = spreadAnchor, rightPageIndex = null)
-                }
-            }
-            ReadingPreferences.SpreadJoinMode.OFF -> null
+            // 只有能组成真正双页的 spread 才生效；否则视为关闭，保护其他页不被拆成单页
+            candidate.takeIf { it?.leftPageIndex != null && it.rightPageIndex != null }
+        }
+    }
+
+    // 当非法状态被内部重置为关闭时，把清理结果同步写回数据库
+    LaunchedEffect(manualSpread) {
+        if (manualSpread == null && spreadMode != ReadingPreferences.SpreadJoinMode.OFF) {
+            spreadMode = ReadingPreferences.SpreadJoinMode.OFF
+            spreadAnchor = -1
+            repo.setSpreadJoin(chapterId, spreadMode.ordinal, spreadAnchor)
         }
     }
 

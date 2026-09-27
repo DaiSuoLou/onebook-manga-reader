@@ -37,7 +37,10 @@ object SpreadHelper {
         firstPageCover: Boolean = true,
         manualSpread: MangaSpread? = null,
     ): List<MangaSpread> {
-        manualSpread?.let { return createManualSpreads(totalPages, it, isRtl) }
+        // 手动合并跨页必须是真正的双页；否则忽略，防止把整本书强制拆成单页
+        val effectiveManual = manualSpread
+            ?.takeIf { it.leftPageIndex != null && it.rightPageIndex != null }
+        effectiveManual?.let { return createManualSpreads(totalPages, it, isRtl) }
 
         if (!isDualPage || totalPages <= 1) {
             return (0 until totalPages).map { MangaSpread(leftPageIndex = it, rightPageIndex = null) }
