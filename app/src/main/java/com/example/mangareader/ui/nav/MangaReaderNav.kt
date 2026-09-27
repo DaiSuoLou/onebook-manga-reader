@@ -154,6 +154,7 @@ fun MangaReaderNav(
                 )
                 else -> MangaReaderScreen(
                     title = currentSession.title,
+                    chapterId = currentSession.chapterId,
                     document = currentSession.document,
                     initialPage = currentSession.initialPage,
                     onPageChanged = { pageIndex -> readerViewModel.onPageChanged(pageIndex) },

@@ -1,6 +1,7 @@
 package com.example.mangareader.data.db
 
 import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 
 /**
  * 数据库迁移登记处 —— 所有 schema 迁移必须在这里登记，别处不允许出现裸 Migration。
@@ -34,8 +35,23 @@ import androidx.room.migration.Migration
  */
 object DatabaseMigrations {
 
+    /**
+     * v1 -> v2：阅读进度表新增两列，承载「按书维度的合并跨页」状态。
+     * 都是带默认值的 NOT NULL 列，直接 ADD COLUMN 一步到位。
+     */
+    private val MIGRATION_1_2 = object : Migration(1, 2) {
+        override fun migrate(db: SupportSQLiteDatabase) {
+            db.execSQL(
+                "ALTER TABLE reading_progress ADD COLUMN spread_join_mode INTEGER NOT NULL DEFAULT 0",
+            )
+            db.execSQL(
+                "ALTER TABLE reading_progress ADD COLUMN spread_join_anchor INTEGER NOT NULL DEFAULT -1",
+            )
+        }
+    }
+
     /** 交给 Room 的全部迁移；Room 会自动挑出从当前版本到目标版本所需的那几步 */
     val ALL: Array<Migration> = arrayOf(
-        // 目前 version = 1。第一次改表时在这里补 MIGRATION_1_2。
+        MIGRATION_1_2,
     )
 }

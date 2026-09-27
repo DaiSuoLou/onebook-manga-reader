@@ -23,7 +23,7 @@ android {
         // 必须大于已装版本，否则报 INSTALL_FAILED_VERSION_DOWNGRADE 装不上。
         // 1.0 是历史版本（当时 versionCode 手写成 1），从这里开始按「×10」推算，
         // 1.1 → 11 仍然大于 1，覆盖安装不受影响。
-        val appVersionName = "1.2"
+        val appVersionName = "1.3"
         versionCode = appVersionName.substringBefore(".").toInt() * 10 +
             appVersionName.substringAfter(".").toInt()
         versionName = appVersionName

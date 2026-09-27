@@ -5,7 +5,7 @@ import androidx.room.RoomDatabase
 
 @Database(
     entities = [ReadingProgressEntity::class],
-    version = 1,
+    version = 2,
     exportSchema = true,   // schema 输出到 app/schemas（见 build.gradle.kts 的 ksp arg）
 )
 abstract class MangaReaderDatabase : RoomDatabase() {

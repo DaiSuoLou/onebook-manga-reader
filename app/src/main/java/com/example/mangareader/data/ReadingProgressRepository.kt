@@ -33,6 +33,10 @@ class ReadingProgressRepository(
     data class ReadingProgress(
         val lastReadPage: Int = 0,   // 已读页数（1 起）
         val totalPages: Int = 0,     // 打开过才知道
+        /** 合并跨页模式：0=关闭，1=与上一页合并，2=与下一页合并（对应 SpreadJoinMode.ordinal） */
+        val spreadJoinMode: Int = 0,
+        /** 合并跨页锚点页码（0 起）；-1 表示未设置 */
+        val spreadJoinAnchor: Int = -1,
     )
 
     private val _progress = MutableStateFlow<Map<String, ReadingProgress>>(emptyMap())
@@ -53,7 +57,12 @@ class ReadingProgressRepository(
     suspend fun loadFromDisk() {
         val list = runCatching { dao.getAll() }.getOrDefault(emptyList())
         _progress.value = list.associate {
-            it.chapterId to ReadingProgress(lastReadPage = it.lastReadPage, totalPages = it.totalPages)
+            it.chapterId to ReadingProgress(
+                lastReadPage = it.lastReadPage,
+                totalPages = it.totalPages,
+                spreadJoinMode = it.spreadJoinMode,
+                spreadJoinAnchor = it.spreadJoinAnchor,
+            )
         }
     }
 
@@ -81,6 +90,19 @@ class ReadingProgressRepository(
 
     fun get(chapterId: String): ReadingProgress = _progress.value[chapterId] ?: ReadingProgress()
 
+    /**
+     * 设置某本书的合并跨页状态（按源前缀的 chapterId 维度，随阅读进度一起持久化）。
+     * @param mode 对应 ReadingPreferences.SpreadJoinMode.ordinal
+     * @param anchor 锚点页码（0 起）；关闭态传 -1
+     */
+    fun setSpreadJoin(chapterId: String, mode: Int, anchor: Int) {
+        _progress.update { map ->
+            val old = map[chapterId] ?: ReadingProgress()
+            map + (chapterId to old.copy(spreadJoinMode = mode, spreadJoinAnchor = anchor))
+        }
+        markDirty(chapterId)
+    }
+
     private fun markDirty(chapterId: String) {
         synchronized(dirty) { dirty.add(chapterId) }
         flushSignal.tryEmit(Unit)
@@ -98,6 +120,8 @@ class ReadingProgressRepository(
                         chapterId = id,
                         lastReadPage = p.lastReadPage,
                         totalPages = p.totalPages,
+                        spreadJoinMode = p.spreadJoinMode,
+                        spreadJoinAnchor = p.spreadJoinAnchor,
                     )
                 )
             }

@@ -80,13 +80,17 @@ import kotlinx.coroutines.launch
 @Composable
 fun MangaReaderScreen(
     title: String,
+    /** 带源前缀的章节 id（如 `saf:3f9a1c07/海贼王/第01话`），合并跨页状态按此维度持久化 */
+    chapterId: String,
     document: MangaDocument,
     initialPage: Int = 0,
     onPageChanged: (pageIndex: Int) -> Unit = {},
     onNavigateBack: () -> Unit,
 ) {
     val context = LocalContext.current
-    val prefs = (context.applicationContext as MangaApplication).readingPreferences
+    val app = context.applicationContext as MangaApplication
+    val prefs = app.readingPreferences
+    val repo = app.progressRepository
     val settings by prefs.settings.collectAsState(initial = ReadingPreferences.Settings())
 
     val coroutineScope = rememberCoroutineScope()
@@ -108,36 +112,37 @@ fun MangaReaderScreen(
     var currentPage by remember { mutableIntStateOf(initialPage.coerceAtLeast(0)) }
     var jumpTarget by remember { mutableStateOf<Int?>(null) }
 
-    // 手动合并跨页时的锚点页码。用户点击合并按钮那一刻，把当前页记录下来，
-    // 后续 spreads 只在该锚点位置显示双页；翻离该位置后自动关闭合并模式。
-    var manualSpreadAnchor by remember { mutableIntStateOf(-1) }
+    // 合并跨页状态按「这本书」(chapterId) 维度持久化在进度库里。
+    // 打开时加载已保存的模式 + 锚点页码；之后除非用户手动改，否则一直保持（翻页/重开都不丢）。
+    val initialSpread = remember { repo.get(chapterId) }
+    var spreadMode by remember {
+        mutableStateOf(
+            ReadingPreferences.SpreadJoinMode.entries.getOrElse(initialSpread.spreadJoinMode) {
+                ReadingPreferences.SpreadJoinMode.OFF
+            },
+        )
+    }
+    var spreadAnchor by remember { mutableIntStateOf(initialSpread.spreadJoinAnchor) }
 
-    // 手动合并跨页：根据当前锚点和模式生成一个双页 spread，边界保护。
-    val manualSpread = remember(settings.spreadJoinMode, manualSpreadAnchor, currentPage, document.pageCount) {
-        val anchor = if (manualSpreadAnchor >= 0) manualSpreadAnchor else currentPage
-        when (settings.spreadJoinMode) {
+    // 合并跨页：根据已保存的锚点和模式生成一个双页 spread，边界保护。
+    // 与上一页合并 -> [anchor-1, anchor]；与下一页合并 -> [anchor, anchor+1]；关闭 -> null。
+    val manualSpread = remember(spreadMode, spreadAnchor, document.pageCount) {
+        when (spreadMode) {
             ReadingPreferences.SpreadJoinMode.JOIN_PREVIOUS -> {
-                if (anchor > 0) {
-                    MangaSpread(leftPageIndex = anchor - 1, rightPageIndex = anchor)
+                if (spreadAnchor > 0) {
+                    MangaSpread(leftPageIndex = spreadAnchor - 1, rightPageIndex = spreadAnchor)
                 } else {
-                    MangaSpread(leftPageIndex = anchor, rightPageIndex = null)
+                    MangaSpread(leftPageIndex = spreadAnchor, rightPageIndex = null)
                 }
             }
             ReadingPreferences.SpreadJoinMode.JOIN_NEXT -> {
-                if (anchor < document.pageCount - 1) {
-                    MangaSpread(leftPageIndex = anchor, rightPageIndex = anchor + 1)
+                if (spreadAnchor < document.pageCount - 1) {
+                    MangaSpread(leftPageIndex = spreadAnchor, rightPageIndex = spreadAnchor + 1)
                 } else {
-                    MangaSpread(leftPageIndex = anchor, rightPageIndex = null)
+                    MangaSpread(leftPageIndex = spreadAnchor, rightPageIndex = null)
                 }
             }
             ReadingPreferences.SpreadJoinMode.OFF -> null
-        }
-    }
-
-    // 从 DataStore 恢复合并模式时若锚点未设置，自动用当前页做锚点。
-    LaunchedEffect(settings.spreadJoinMode, currentPage) {
-        if (settings.spreadJoinMode != ReadingPreferences.SpreadJoinMode.OFF && manualSpreadAnchor < 0) {
-            manualSpreadAnchor = currentPage
         }
     }
 
@@ -145,26 +150,11 @@ fun MangaReaderScreen(
     var turnRequest by remember { mutableStateOf<Int?>(null) }
     val turnPage: (Int) -> Unit = { delta -> turnRequest = delta }
 
-    // 页码变化：既刷底栏显示，也回传给 ViewModel 保存进度。
-    // 手动合并跨页时，一旦翻到合并 spread 之外的页，就自动关闭合并模式。
+    // 页码变化：刷底栏显示，回传 ViewModel 保存进度。
+    // 合并跨页不再因翻页自动取消——它是这本书保存下来的状态，会一直保持。
     val handlePageChanged: (Int) -> Unit = { pageIndex ->
         currentPage = pageIndex
         onPageChanged(pageIndex)
-        if (settings.spreadJoinMode != ReadingPreferences.SpreadJoinMode.OFF &&
-            manualSpreadAnchor >= 0
-        ) {
-            val inManualSpread = when (settings.spreadJoinMode) {
-                ReadingPreferences.SpreadJoinMode.JOIN_PREVIOUS ->
-                    pageIndex == manualSpreadAnchor || pageIndex == manualSpreadAnchor - 1
-                ReadingPreferences.SpreadJoinMode.JOIN_NEXT ->
-                    pageIndex == manualSpreadAnchor || pageIndex == manualSpreadAnchor + 1
-                else -> false
-            }
-            if (!inManualSpread) {
-                manualSpreadAnchor = -1
-                coroutineScope.launch { prefs.setSpreadJoinMode(ReadingPreferences.SpreadJoinMode.OFF) }
-            }
-        }
     }
 
     // 音量键翻页：翻页方向由设置决定。阅读器销毁时必须摘掉钩子，
@@ -384,19 +374,17 @@ fun MangaReaderScreen(
                 title = title,
                 onNavigateBack = onNavigateBack,
                 isRtl = isReadingRtl,
-                spreadJoinMode = settings.spreadJoinMode,
-                onCycleSpreadJoinMode = {
-                    val next = when (settings.spreadJoinMode) {
-                        ReadingPreferences.SpreadJoinMode.OFF ->
-                            ReadingPreferences.SpreadJoinMode.JOIN_PREVIOUS
-                        ReadingPreferences.SpreadJoinMode.JOIN_PREVIOUS ->
-                            ReadingPreferences.SpreadJoinMode.JOIN_NEXT
-                        ReadingPreferences.SpreadJoinMode.JOIN_NEXT ->
-                            ReadingPreferences.SpreadJoinMode.OFF
+                spreadJoinMode = spreadMode,
+                onSetSpreadJoinMode = { mode ->
+                    spreadMode = mode
+                    // 锚点取「当前页」：合并以此刻正在看的这一页为基点
+                    spreadAnchor = if (mode == ReadingPreferences.SpreadJoinMode.OFF) -1 else currentPage
+                    coroutineScope.launch {
+                        repo.setSpreadJoin(chapterId, mode.ordinal, spreadAnchor)
                     }
-                    manualSpreadAnchor = if (next == ReadingPreferences.SpreadJoinMode.OFF) -1 else currentPage
-                    coroutineScope.launch { prefs.setSpreadJoinMode(next) }
                 },
+                canJoinPrevious = currentPage > 0,
+                canJoinNext = currentPage < document.pageCount - 1,
                 orientation = settings.orientation,
                 onCycleOrientation = {
                     coroutineScope.launch {
