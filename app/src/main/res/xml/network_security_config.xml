@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    收窄明文流量的方案：把 Manifest 里的 android:usesCleartextTraffic 设为 false，
+    并加上 android:networkSecurityConfig="@xml/network_security_config"。
+    下面只对内网 NAS 放开明文，其余域名一律要求 HTTPS。
+    把 includeSubdomains / domain 换成你自己的 NAS 地址（域名或固定内网 IP）。
+-->
+<network-security-config>
+    <!-- 默认禁止明文 -->
+    <base-config cleartextTrafficPermitted="false" />
+
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">localhost</domain>
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <!-- 例：内网 NAS -->
+        <!-- <domain includeSubdomains="false">192.168.1.10</domain> -->
+        <!-- <domain includeSubdomains="true">nas.local</domain> -->
+    </domain-config>
+
+    <!--
+        若 NAS 用自签证书，把 CA 放到 res/raw/my_ca.crt 并取消下面注释：
+        <domain-config>
+            <domain includeSubdomains="true">nas.local</domain>
+            <trust-anchors>
+                <certificates src="@raw/my_ca" />
+                <certificates src="system" />
+            </trust-anchors>
+        </domain-config>
+    -->
+</network-security-config>

@@ -1,0 +1,29 @@
+# 构建产物
+/build
+/app/build
+/app/release
+/.gradle
+.kotlin
+.idea
+*.iml
+local.properties
+
+# 发布签名密钥（绝对不要提交到版本库）
+*.jks
+*.keystore
+
+# 本地缓存
+.cxx
+captures/
+
+# 真机排查用的临时产物（uiautomator dump / 截图 / 诊断日志）
+.tmpdiag
+screenshots
+*.log
+
+# 图标生成中间产物（保留 gen_icon.py 脚本本身）
+icon_out/
+
+# 例外：发布用的 APK 需要纳入版本库
+!releases/
+!releases/*.apk

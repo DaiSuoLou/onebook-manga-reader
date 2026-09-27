@@ -1,0 +1,11 @@
+# 复制本文件为 local.properties 并填入你本机的配置（该文件已被 .gitignore 排除，不会提交）
+# 注意：Windows 路径中的反斜杠需要转义
+
+# Android SDK 路径（每台机器不同，必填）
+sdk.dir=C:\\Users\\你的用户名\\Android\\Sdk
+
+# 发布签名（可选；不填则 release 构建回退到 debug 签名，产物不能用于正式发布）
+# RELEASE_STORE_FILE=release-keystore.jks
+# RELEASE_STORE_PASSWORD=你的密码
+# RELEASE_KEY_ALIAS=mangareader
+# RELEASE_KEY_PASSWORD=你的密码

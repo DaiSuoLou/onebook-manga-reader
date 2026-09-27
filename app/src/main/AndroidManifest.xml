@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- WebDAV 网络请求权限 -->
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
+    <!--
+        本地文件访问：
+        - Android 10(29) 及以下需要 READ_EXTERNAL_STORAGE
+        - Android 11(30) 起是作用域存储，推荐用 SAF(ACTION_OPEN_DOCUMENT_TREE) 授权目录，
+          避免申请 MANAGE_EXTERNAL_STORAGE（Play 上架大概率被拒）
+    -->
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+
+    <!-- Android 13(33) 起从媒体库读图片（若走 MediaStore 而非 SAF） -->
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+
+    <!--
+        usesCleartextTraffic="true"：允许通过 HTTP 访问私有 NAS（未配自签 HTTPS 时）。
+        这是全局明文开关，发布版建议收窄为：
+            android:usesCleartextTraffic="false"
+            android:networkSecurityConfig="@xml/network_security_config"
+        只对你自己的 NAS 域名/内网地址放开明文，见 res/xml/network_security_config.xml
+    -->
+    <application
+        android:name=".MangaApplication"
+        android:allowBackup="true"
+        android:icon="@mipmap/ic_launcher"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:label="@string/app_name"
+        android:hardwareAccelerated="true"
+        android:largeHeap="true"
+        android:theme="@style/Theme.MangaReader"
+        android:supportsRtl="false"
+        android:usesCleartextTraffic="true">
+
+        <!--
+            折叠屏内外屏切换会改变这些配置。不声明的话系统会销毁重建 Activity，
+            重建过程中开屏/折叠监听容易出岔子（表现为切换内外屏闪退）；
+            声明后由页面自己按新的 Configuration 重组即可。
+        -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true"
+            android:label="@string/app_name"
+            android:theme="@style/Theme.App.Starting"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|density|uiMode|fontScale|layoutDirection"
+            android:screenOrientation="user">
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+
+</manifest>

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- 1. 应用程序正式运行的主题 -->
+    <!--
+        注意：parent 用的是平台自带的 android:Theme.Material.Light.NoActionBar，
+        不是 Theme.Material3.DayNight.NoActionBar —— 后者属于 View 体系的
+        Material Components（com.google.android.material:material），本项目是纯 Compose，
+        没引入该库，直接写会报 "resource style not found"。
+    -->
+    <style name="Theme.MangaReader" parent="android:Theme.Material.Light.NoActionBar">
+        <!-- 导航栏、状态栏颜色及透明度 -->
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <!-- 书架是暖色浅底（CavityBackground #C79862），状态栏图标必须是深色才看得见 -->
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowBackground">@android:color/white</item>
+    </style>
+
+    <!-- 2. 冷启动瞬时展示的 Splash 主题 -->
+    <style name="Theme.App.Starting" parent="Theme.SplashScreen">
+        <!-- 启动页背景色（暗夜蓝黑底，与启动图标底板同色系，避免开屏消失时闪白） -->
+        <item name="windowSplashScreenBackground">#12131A</item>
+        <!-- 启动图标：复用前面生成的展开漫画书前景矢量图 -->
+        <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
+        <!-- 启动完成（数据准备就绪）后，系统自动切换回的真实 App 主题 -->
+        <item name="postSplashScreenTheme">@style/Theme.MangaReader</item>
+    </style>
+</resources>
